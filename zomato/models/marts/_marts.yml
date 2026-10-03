@@ -1,0 +1,12 @@
+version: 2
+models:
+  - name: fct_orders
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_id
+        tests:
+          - relationships: { to: ref('dim_customer'), field: customer_id }   # referential integrity
+      - name: order_status
+        tests:
+          - accepted_values: { values: ['Delivered','Cancelled','Refunded'] }

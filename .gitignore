@@ -1,0 +1,40 @@
+﻿# Environment
+.env
+.env.*
+!.env.example
+
+# Data
+DATA/
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs
+logs/
+*.log
+
+# Embeddings / large generated files
+*.parquet
+
+# Airflow
+airflow/logs/
+airflow/airflow.db
+
+# dbt
+zomato/target/
+zomato/dbt_packages/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml

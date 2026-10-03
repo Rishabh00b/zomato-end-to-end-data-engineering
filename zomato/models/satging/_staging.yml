@@ -1,0 +1,26 @@
+version: 2
+models:
+  - name: stg_orders
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_id
+        tests: [not_null]
+      - name: restaurant_id
+        tests: [not_null]
+  - name: stg_order_items
+    columns:
+      - name: order_item_id
+        tests: [unique, not_null]
+  - name: stg_restaurants
+    columns:
+      - name: restaurant_id
+        tests: [unique, not_null]
+  - name: stg_users
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+  - name: stg_reviews
+    columns:
+      - name: review_id
+        tests: [unique, not_null]

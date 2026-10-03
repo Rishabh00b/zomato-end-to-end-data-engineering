@@ -1,0 +1,84 @@
+# Local Airflow 3.x (LocalExecutor) on Docker.
+# Airflow 3 differences vs 2.x: webserver -> api-server, a separate dag-processor,
+# and the FAB auth manager for classic admin/admin login.
+#   cp .env.example .env   # fill creds
+#   docker compose build && docker compose up -d   # UI: http://localhost:8080 (admin/admin)
+x-airflow-common: &airflow-common
+  build: .
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__CORE__FERNET_KEY: ''
+    # Airflow 3 signs inter-component (execution API) calls with this JWT secret:
+    AIRFLOW__API_AUTH__JWT_SECRET: 'change-me-please-a-random-secret'
+    # CRITICAL in multi-container Airflow 3: tasks reach the Execution API by the api-server's
+    # SERVICE NAME, not localhost. Without this, tasks die → "state mismatch ... failed".
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://apiserver:8080/execution/'
+    # dbt + the AI task read these:
+    SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
+    SNOWFLAKE_USER: ${SNOWFLAKE_USER}
+    SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD}
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+    SAMPLE_N: ${SAMPLE_N:-5}
+    AIRFLOW_CONN_SNOWFLAKE_DEFAULT: '{"conn_type":"snowflake","login":"${SNOWFLAKE_USER}","password":"${SNOWFLAKE_PASSWORD}","schema":"RAW","extra":{"account":"${SNOWFLAKE_ACCOUNT}","warehouse":"ZOMATO_WH","database":"ZOMATO","role":"DBT_ROLE"}}'
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ../zomato:/opt/airflow/dbt/zomato      # your dbt project
+    - ../ai:/opt/airflow/ai                       # the enrich_reviews.py script
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - airflow db migrate && airflow users create --username admin --password admin --firstname a --lastname b --role Admin --email admin@example.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  apiserver:
+    <<: *airflow-common
+    command: api-server          # Airflow 3: replaces `webserver`
+    ports: ["8080:8080"]
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  dag-processor:
+    <<: *airflow-common
+    command: dag-processor       # Airflow 3: DAG parsing is its own component
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
